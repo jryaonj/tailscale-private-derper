@@ -1,0 +1,11 @@
+[Unit]
+Description=Tailscale derp service
+After=network.target
+
+[Service]
+ExecStart=/usr/local/go/bin/derper -c /root/derper-init/config.json -a :8888 -http-port -1 -stun-port 8889 -hostname priv-derp --certmode manual -certdir /root/certdir --verify-clients
+Restart=always
+User=root
+
+[Install]
+WantedBy=multi-user.target
