@@ -180,6 +180,71 @@ If your server is behind a NAT/firewall, ensure the following ports are forwarde
 - **TCP 8888**: DERP protocol (primary)
 - **UDP 8889**: STUN protocol (NAT traversal)
 
+## Known Issues
+
+### DERP and Tailscaled on Same Host Bug (Tailscale < 1.94)
+
+**Bug**: When running the DERP server and `tailscaled` on the same machine, peers cannot be verified by `tailscaled`, resulting in peer authorization failures.
+
+**Symptom**: Error messages in the derper log:
+```
+derp: aa.bb.cc.dd:41611: client nodekey: rejected: peer nodekey: 1234abcd not authorized (not found in local tailscaled)
+```
+
+**References**:
+- [GitHub Issue #16052](https://github.com/tailscale/tailscale/issues/16052)
+- [GitHub Issue #16416](https://github.com/tailscale/tailscale/issues/16416)
+
+**Workaround for Tailscale < 1.94**:
+Build and install the latest `tailscaled` and `tailscale` from source, bypassing the release channel:
+
+```bash
+# Build from latest source (includes bug fix)
+go install tailscale.com/cmd/tailscaled@latest
+go install tailscale.com/cmd/tailscale@latest
+
+# Move binaries to /usr/local/sbin with prefix
+rsync -a ~/go/bin/tailscale /usr/local/sbin/go-tailscale
+rsync -a ~/go/bin/tailscaled /usr/local/sbin/go-tailscaled
+```
+
+**Update systemd service**:
+```bash
+sudo systemctl edit tailscaled
+```
+
+Add or modify the `[Service]` section:
+```ini
+[Service]
+ExecStart=
+ExecStart=/usr/local/sbin/go-tailscaled --state=/var/lib/tailscale/tailscaled.state --socket=/run/tailscale/tailscaled.sock --port=${PORT} $FLAGS
+```
+
+**Status**: Fixed in Tailscale v1.94+. Upgrade to the latest stable release when available.
+
+### Skipping WireGuard IPs with IPAddressDeny
+
+**Issue**: When nodes already have WireGuard IPs assigned, Tailscale traffic may be wrapped in WireGuard tunnels, causing unnecessary performance overhead.
+
+**Solution**: Use systemd's `IPAddressDeny` mechanism to skip specific CIDR ranges from being processed by Tailscale.
+
+**Configuration**:
+Edit the `tailscaled` systemd service:
+```bash
+sudo systemctl edit tailscaled
+```
+
+Add `IPAddressDeny` lines for each WireGuard subnet you want to skip (one CIDR per line):
+```ini
+[Service]
+IPAddressDeny=172.19.0.0/16
+IPAddressDeny=172.32.192.0/24
+```
+
+Replace the CIDR ranges with your actual WireGuard subnet allocations. This prevents Tailscale from applying its tunnel to these pre-existing WireGuard IPs, improving performance and reducing overhead.
+
+**Reference**: [GitHub Issue #14306](https://github.com/tailscale/tailscale/issues/14306)
+
 ## Logs
 
 View service logs:
